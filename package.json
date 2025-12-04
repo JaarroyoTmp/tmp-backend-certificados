@@ -1,0 +1,9 @@
+{
+  "name": "tmp-backend-certificados",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@sparticuz/chromium": "^123.0.0",
+    "puppeteer-core": "^23.0.0"
+  }
+}
