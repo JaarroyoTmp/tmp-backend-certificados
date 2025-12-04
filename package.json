@@ -1,13 +1,11 @@
 {
   "name": "tmp-backend-certificados",
   "version": "1.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "vercel dev"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
-    "pdf-lib": "^1.17.1"
+    "puppeteer": "19.7.2"
   }
 }
