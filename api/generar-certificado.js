@@ -1,17 +1,9 @@
-import express from "express";
-import cors from "cors";
+export default async function handler(req, res) {
+  // Permitir solo POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "25mb" }));
-
-// TEST ROUTE
-app.get("/", (req, res) => {
-  res.send("TMP Backend for Certificates · OK");
-});
-
-// GENERATE CERTIFICATE PDF
-app.post("/generar-certificado", async (req, res) => {
   try {
     const { html, filename } = req.body;
 
@@ -19,16 +11,14 @@ app.post("/generar-certificado", async (req, res) => {
       return res.status(400).json({ error: "Missing HTML" });
     }
 
-    res.json({
+    // Aquí luego añadiremos la generación del PDF en el servidor
+    return res.status(200).json({
       ok: true,
-      pdf: null,
-      message: "PDF generation will be added later"
+      message: "PDF generation will be implemented",
     });
 
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (error) {
+    console.error("Server error:", error);
+    return res.status(500).json({ error: error.toString() });
   }
-});
-
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log("Backend running on port", port));
+}
