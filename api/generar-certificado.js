@@ -14,12 +14,13 @@ export default async function handler(req, res) {
     }
 
     // Lanzar navegador (configurado para Vercel)
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    });
+const browser = await puppeteer.launch({
+  args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+  defaultViewport: chromium.defaultViewport,
+  executablePath: await chromium.executablePath(),
+  headless: chromium.headless
+});
+
 
     const page = await browser.newPage();
 
