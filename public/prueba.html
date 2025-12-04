@@ -10,24 +10,35 @@
 
 <script>
 async function probar() {
-  document.getElementById("resultado").innerText = "Enviando petición...";
-  
+  const salida = document.getElementById("resultado");
+  salida.innerText = "Enviando petición...";
+
   try {
     const res = await fetch("https://tmp-backend-certificados.vercel.app/api/generar-certificado", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        html: "<h1>Hola PDF desde tester</h1>",
+        html: "<h1>Certificado TMP</h1><p>Generado correctamente ✔️</p>",
         filename: "certificado.pdf"
       })
     });
 
-    const data = await res.json();
-    document.getElementById("resultado").innerText = JSON.stringify(data, null, 2);
+    if (!res.ok) {
+      const txt = await res.text();
+      salida.innerText = "Error HTTP: " + res.status + "\\n" + txt;
+      return;
+    }
 
+    // Recibir el PDF como binario
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    // Abrir el PDF en una nueva pestaña
+    window.open(url, "_blank");
+
+    salida.innerText = "PDF generado correctamente. Abriendo en nueva pestaña...";
   } catch (err) {
-    document.getElementById("resultado").innerText =
-      "ERROR:\n" + err.toString();
+    salida.innerText = "ERROR:\\n" + err.toString();
   }
 }
 </script>
