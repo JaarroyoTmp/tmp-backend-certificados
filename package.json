@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
     "@sparticuz/chromium": "119.0.1",
     "puppeteer-core": "19.11.1"
