@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Probar API generar-certificado</h2>
+
+<button onclick="probar()">Enviar POST</button>
+
+<pre id="resultado" style="padding:10px; background:#eee; white-space:pre-wrap;"></pre>
+
+<script>
+async function probar() {
+  document.getElementById("resultado").innerText = "Enviando petición...";
+  
+  try {
+    const res = await fetch("https://tmp-backend-certificados.vercel.app/api/generar-certificado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        html: "<h1>Hola PDF desde tester</h1>",
+        filename: "certificado.pdf"
+      })
+    });
+
+    const data = await res.json();
+    document.getElementById("resultado").innerText = JSON.stringify(data, null, 2);
+
+  } catch (err) {
+    document.getElementById("resultado").innerText =
+      "ERROR:\n" + err.toString();
+  }
+}
+</script>
+
+</body>
+</html>
