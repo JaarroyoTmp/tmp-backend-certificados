@@ -1,56 +1,52 @@
 export default async function handler(req, res) {
-  console.log(">> API llamada");
+  // SOLO ACEPTAR POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
+    const { html } = req.body;
+
+    if (!html) {
+      return res.status(400).json({ error: "HTML content is required" });
     }
-
-    const { html, filename } = req.body;
-
-    console.log(">> HTML recibido:", html ? "OK" : "VACÍO");
 
     const apiKey = process.env.PDFSHIFT_API_KEY;
-
-    console.log(">> API KEY CARGADA:", apiKey ? "OK" : "NO ENCONTRADA");
-
-    if (!apiKey) {
-      return res.status(500).json({ error: "Missing PDFShift API key" });
-    }
 
     const pdfResponse = await fetch("https://api.pdfshift.io/v2/convert/pdf", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": apiKey, // ← ESTA ES LA FORMA CORRECTA
+        Authorization:
+          "Basic " + Buffer.from(apiKey + ":").toString("base64"),
       },
       body: JSON.stringify({
         source: html,
-        use_print: true,
-        background: true,
+        landscape: false,
+        use_print: false,
       }),
     });
 
-    console.log(">> Respuesta PDFSHIFT Status:", pdfRes.status);
-
-    const buffer = await pdfRes.arrayBuffer();
-
-    if (!pdfRes.ok) {
-      const errText = Buffer.from(buffer).toString();
-      console.log(">> Error PDFShift:", errText);
-      return res.status(500).json({ error: errText });
+    if (!pdfResponse.ok) {
+      const errText = await pdfResponse.text();
+      console.error("PDFShift error:", errText);
+      return res.status(500).json({
+        error: "Error generating PDF",
+        details: errText,
+      });
     }
+
+    const pdfBuffer = await pdfResponse.arrayBuffer();
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${filename || "certificado.pdf"}"`
+      "inline; filename=certificado.pdf"
     );
-
-    return res.status(200).send(Buffer.from(buffer));
+    res.send(Buffer.from(pdfBuffer));
   } catch (error) {
-    console.error("🔥 Error en servidor:", error);
-    return res.status(500).json({ error: error.toString() });
+    console.error("Handler exception:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 
