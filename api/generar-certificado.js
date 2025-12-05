@@ -1,6 +1,3 @@
-import chromium from "@sparticuz/chromium";
-import puppeteer from "puppeteer-core";
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -13,39 +10,44 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing HTML" });
     }
 
-    // Lanzar navegador (configurado para Vercel)
-const browser = await puppeteer.launch({
-  args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
-  defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath(),
-  headless: chromium.headless
-});
+    const apiKey = process.env.PDFSHIFT_API_KEY;
 
+    if (!apiKey) {
+      return res.status(500).json({ error: "Missing PDFShift API key" });
+    }
 
-    const page = await browser.newPage();
-
-    // Cargar el HTML que viene desde el frontend
-    await page.setContent(html, { waitUntil: "networkidle0" });
-
-    // Generar el PDF
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
+    // Llamada a PDFShift (NO Puppeteer)
+    const pdfRes = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Basic " + Buffer.from(apiKey + ":").toString("base64"),
+      },
+      body: JSON.stringify({
+        source: html,
+        use_print: true,
+        background: true,
+      }),
     });
 
-    await browser.close();
+    if (!pdfRes.ok) {
+      const errorText = await pdfRes.text();
+      return res.status(500).json({ error: errorText });
+    }
 
-    // Enviar el PDF como respuesta
+    // Recibir binario del PDF
+    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${filename || "certificado.pdf"}"`
     );
 
-    return res.status(200).send(pdf);
-
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
-    console.error(error);
+    console.error("PDF ERROR:", error);
     return res.status(500).json({ error: error.toString() });
   }
 }
+
