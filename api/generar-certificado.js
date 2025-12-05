@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing PDFShift API key" });
     }
 
-    const pdfRes = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
+    const pdfResponse = await fetch("https://api.pdfshift.io/v2/convert/pdf", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
