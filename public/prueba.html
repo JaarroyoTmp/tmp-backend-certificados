@@ -1,47 +1,79 @@
 <!DOCTYPE html>
-<html>
-<body>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prueba de Generación de PDF</title>
 
-<h2>Probar API generar-certificado</h2>
-
-<button onclick="probar()">Enviar POST</button>
-
-<pre id="resultado" style="padding:10px; background:#eee; white-space:pre-wrap;"></pre>
-
-<script>
-async function probar() {
-  const salida = document.getElementById("resultado");
-  salida.innerText = "Enviando petición...";
-
-  try {
-    const res = await fetch("https://tmp-backend-certificados.vercel.app/api/generar-certificado", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        html: "<h1>Certificado TMP</h1><p>Generado correctamente ✔️</p>",
-        filename: "certificado.pdf"
-      })
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      salida.innerText = "Error HTTP: " + res.status + "\\n" + txt;
-      return;
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
     }
 
-    // Recibir el PDF como binario
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    #generarBtn {
+      padding: 12px 24px;
+      background-color: #2d7ff9;
+      color: white;
+      border: none;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
 
-    // Abrir el PDF en una nueva pestaña
-    window.open(url, "_blank");
+    #generarBtn:hover {
+      background-color: #1e5fc5;
+    }
 
-    salida.innerText = "PDF generado correctamente. Abriendo en nueva pestaña...";
-  } catch (err) {
-    salida.innerText = "ERROR:\\n" + err.toString();
-  }
-}
-</script>
+    .resultado {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Prueba de generación de PDF</h1>
+  <p>Haz clic en el botón para generar un PDF usando el backend.</p>
+
+  <button id="generarBtn">Generar PDF de prueba</button>
+
+  <div class="resultado" id="resultado"></div>
+
+  <script>
+    document.getElementById("generarBtn").addEventListener("click", async () => {
+      document.getElementById("resultado").innerText = "Generando PDF...";
+
+      const html = `
+        <h1>PDF de prueba</h1>
+        <p>Este PDF fue generado correctamente desde Vercel usando PDFShift v2.</p>
+        <p>Prueba completada.</p>
+      `;
+
+      try {
+        const response = await fetch("/api/generar-certificado", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ html })
+        });
+
+        if (!response.ok) {
+          document.getElementById("resultado").innerText = "Error al generar PDF.";
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+
+        document.getElementById("resultado").innerText = "PDF generado correctamente.";
+      } catch (error) {
+        document.getElementById("resultado").innerText = "Error inesperado.";
+        console.error(error);
+      }
+    });
+  </script>
 
 </body>
 </html>
