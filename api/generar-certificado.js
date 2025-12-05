@@ -1,4 +1,6 @@
 export default async function handler(req, res) {
+  console.log("Usando PDFShift v1 (endpoint cargado correctamente)");
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -13,10 +15,13 @@ export default async function handler(req, res) {
     const apiKey = process.env.PDFSHIFT_API_KEY;
 
     if (!apiKey) {
+      console.error("PDFSHIFT_API_KEY no está definida en Vercel");
       return res.status(500).json({ error: "Missing PDFShift API key" });
     }
 
-    // Llamada a PDFShift (NO Puppeteer)
+    console.log("Llamando a PDFShift...");
+
+    // Llamada a PDFShift (NO Puppeteer, NO Chromium)
     const pdfRes = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
       method: "POST",
       headers: {
@@ -26,14 +31,17 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         source: html,
         use_print: true,
-        background: true,
+        background: true
       }),
     });
 
     if (!pdfRes.ok) {
       const errorText = await pdfRes.text();
+      console.error("Error de PDFShift:", errorText);
       return res.status(500).json({ error: errorText });
     }
+
+    console.log("PDF recibido desde PDFShift.");
 
     // Recibir binario del PDF
     const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
@@ -45,9 +53,9 @@ export default async function handler(req, res) {
     );
 
     return res.status(200).send(pdfBuffer);
+
   } catch (error) {
     console.error("PDF ERROR:", error);
     return res.status(500).json({ error: error.toString() });
   }
 }
-
