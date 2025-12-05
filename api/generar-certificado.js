@@ -16,8 +16,12 @@ export default async function handler(req, res) {
     const { html } = req.body;
 
     if (!html) {
-      return res.status(400).json({ error: "HTML content is required", body: req.body });
-    }
+  return res.status(400).json({ 
+    error: "HTML content is required",
+    received_body: req.body       // 👈 Aquí vemos lo que llega realmente
+  });
+}
+
 
     const username = process.env.PDFCROWD_USERNAME;
     const apiKey = process.env.PDFCROWD_API_KEY;
