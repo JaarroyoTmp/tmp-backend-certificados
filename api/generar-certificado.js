@@ -16,18 +16,21 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": apiKey,
+        "X-API-Key": apiKey
       },
       body: JSON.stringify({
         source: html,
         landscape: false,
-      }),
+        use_print: false
+      })
     });
 
     if (!pdfResponse.ok) {
       const errText = await pdfResponse.text();
-      console.error("PDFShift v3 error:", errText);
-      return res.status(500).json({ error: "Error generating PDF", details: errText });
+      return res.status(500).json({
+        error: "Error generating PDF",
+        details: errText
+      });
     }
 
     const pdfBuffer = await pdfResponse.arrayBuffer();
@@ -36,7 +39,7 @@ export default async function handler(req, res) {
     res.setHeader("Content-Disposition", "inline; filename=certificado.pdf");
     res.send(Buffer.from(pdfBuffer));
   } catch (error) {
-    console.error("Handler exception:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
