@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // SOLO ACEPTAR POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -13,40 +12,31 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.PDFSHIFT_API_KEY;
 
-    const pdfResponse = await fetch("https://api.pdfshift.io/v2/convert/pdf", {
+    const pdfResponse = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization:
-          "Basic " + Buffer.from(apiKey + ":").toString("base64"),
+        "X-API-Key": apiKey,
       },
       body: JSON.stringify({
         source: html,
         landscape: false,
-        use_print: false,
       }),
     });
 
     if (!pdfResponse.ok) {
       const errText = await pdfResponse.text();
-      console.error("PDFShift error:", errText);
-      return res.status(500).json({
-        error: "Error generating PDF",
-        details: errText,
-      });
+      console.error("PDFShift v3 error:", errText);
+      return res.status(500).json({ error: "Error generating PDF", details: errText });
     }
 
     const pdfBuffer = await pdfResponse.arrayBuffer();
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      "inline; filename=certificado.pdf"
-    );
+    res.setHeader("Content-Disposition", "inline; filename=certificado.pdf");
     res.send(Buffer.from(pdfBuffer));
   } catch (error) {
     console.error("Handler exception:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 }
-
