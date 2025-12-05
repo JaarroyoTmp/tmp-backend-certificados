@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const apiKey = process.env.PDFSHIFT_API_KEY;
 
     // Para depuración: se verá en Runtime Logs de Vercel
-    console.log("API KEY RECIBIDA EN SERVIDOR:", apiKey);
+    console.log("API KEY RECIBIDA EN SERVIDOR:", JSON.stringify(apiKey); // DEBUG
 
     if (!apiKey) {
       return res.status(500).json({ error: "Missing PDFShift API key" });
