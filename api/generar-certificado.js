@@ -2,11 +2,13 @@ import pdfcrowd from "pdfcrowd";
 
 export const config = {
   api: {
-    bodyParser: true, 
+    bodyParser: true,
   },
 };
 
 export default async function handler(req, res) {
+  console.log("BACKEND EJECUTANDO, VERSION 3");  // <--- AÑADIDO
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -14,11 +16,10 @@ export default async function handler(req, res) {
   try {
     const { html } = req.body;
 
-    // 🔍 PASO 2: Log si el HTML no llega
     if (!html) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "HTML content is required",
-        received_body: req.body 
+        received_body: req.body
       });
     }
 
@@ -32,7 +33,6 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", "inline; filename=certificado.pdf");
     res.send(Buffer.from(pdfBuffer));
-
   } catch (err) {
     res.status(500).json({
       error: "Error generating PDF",
