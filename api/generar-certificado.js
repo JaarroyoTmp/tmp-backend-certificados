@@ -11,6 +11,7 @@ export default async function handler(req, res) {
     }
 
     const apiKey = process.env.PDFSHIFT_API_KEY;
+    console.log("API KEY RECIBIDA EN SERVIDOR:", apiKey);
 
     if (!apiKey) {
       return res.status(500).json({ error: "Missing PDFShift API key" });
