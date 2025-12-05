@@ -1,6 +1,4 @@
 export default async function handler(req, res) {
-  console.log("Usando PDFShift v1 (endpoint cargado correctamente)");
-
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -15,36 +13,29 @@ export default async function handler(req, res) {
     const apiKey = process.env.PDFSHIFT_API_KEY;
 
     if (!apiKey) {
-      console.error("PDFSHIFT_API_KEY no está definida en Vercel");
       return res.status(500).json({ error: "Missing PDFShift API key" });
     }
 
-    console.log("Llamando a PDFShift...");
-
-    // Llamada a PDFShift (NO Puppeteer, NO Chromium)
+    // Llamada a PDFShift usando X-API-Key
     const pdfRes = await fetch("https://api.pdfshift.io/v3/convert/pdf", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Basic " + Buffer.from(apiKey + ":").toString("base64"),
+        "X-API-Key": apiKey,            // ← ESTA ES LA AUTENTICACIÓN CORRECTA
       },
       body: JSON.stringify({
         source: html,
         use_print: true,
-        background: true
+        background: true,
       }),
     });
 
+    const data = await pdfRes.arrayBuffer();
+
     if (!pdfRes.ok) {
-      const errorText = await pdfRes.text();
-      console.error("Error de PDFShift:", errorText);
-      return res.status(500).json({ error: errorText });
+      let text = Buffer.from(data).toString();
+      return res.status(500).json({ error: text });
     }
-
-    console.log("PDF recibido desde PDFShift.");
-
-    // Recibir binario del PDF
-    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -52,8 +43,7 @@ export default async function handler(req, res) {
       `attachment; filename="${filename || "certificado.pdf"}"`
     );
 
-    return res.status(200).send(pdfBuffer);
-
+    return res.status(200).send(Buffer.from(data));
   } catch (error) {
     console.error("PDF ERROR:", error);
     return res.status(500).json({ error: error.toString() });
