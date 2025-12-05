@@ -1,8 +1,14 @@
 {
   "name": "tmp-backend-certificados",
   "version": "1.0.0",
-  "type": "commonjs",
-  "engines": {
-    "node": "20.x"
+  "description": "Backend para generar PDF usando PDFCrowd",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "pdfcrowd": "^5.11.0"
   }
 }
