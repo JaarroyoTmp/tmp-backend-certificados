@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prueba Certificado Oficial</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+    }
+    button {
+      padding: 10px 18px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Prueba de generación de Certificado Oficial</h1>
+<p>Pulsa el botón para llamar al endpoint <code>/api/generar-certificado-oficial</code> con datos de demo.</p>
+
+<button id="btn">Generar certificado DEMO</button>
+
+<script>
+  document.getElementById("btn").addEventListener("click", async () => {
+    const payload = {
+      certificado: {
+        numero: "CC-2025-DEMO-0001",
+        fecha_emision: "2025-12-09",
+        regla_decision: "ILAC-G8"
+      },
+      instrumento: {
+        codigo: "INST-DEMO-001",
+        descripcion: "Calibre pie de rey DEMO",
+        fabricante_tipo: "FAB DEMO / Tipo DEMO",
+        rango: "0-150 mm",
+        unidad_base: "mm"
+      },
+      condiciones: {
+        temperatura: "20.0",
+        humedad: "50",
+        fecha_calibracion: "2025-12-09",
+        observaciones: "Condiciones de demo."
+      },
+      resumenGlobal: {
+        decision_global: "APTO"
+      },
+      bloquesResultados: [
+        {
+          tipo: "GNG",
+          nombre_patron: "Patrón DEMO 1",
+          lado: "GO",
+          puntos: [
+            {
+              nominal_mm: 10.000,
+              correccion_um: 0.0,
+              media_mm: 10.000,
+              error_um: 0.0,
+              u_um: 2.0,
+              tolerancia_um: 10.0,
+              decision: "APTO"
+            },
+            {
+              nominal_mm: 50.000,
+              correccion_um: 0.5,
+              media_mm: 50.0005,
+              error_um: 0.5,
+              u_um: 2.0,
+              tolerancia_um: 10.0,
+              decision: "APTO"
+            }
+          ]
+        }
+      ]
+    };
+
+    const res = await fetch("/api/generar-certificado-oficial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      alert("Error al generar certificado: " + txt);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  });
+</script>
+
+</body>
+</html>
