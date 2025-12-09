@@ -1,11 +1,5 @@
 // api/generar-certificado-oficial.js
 
-// Este endpoint:
-// 1) Recibe los datos de la calibración en JSON.
-// 2) Construye el HTML del certificado.
-// 3) Llama a https://api.html2pdf.app/v1/generate con tu API KEY.
-// 4) Devuelve el PDF al navegador.
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res
@@ -16,14 +10,11 @@ export default async function handler(req, res) {
   try {
     const data = req.body || {};
 
-    // Número de certificado para nombre del archivo y QR
-    const numeroCert =
-      (data.certificado && data.certificado.numero) || "CC-SIN-NUMERO";
+    const cert = data.certificado || {};
+    const numeroCert = cert.numero || "CC-SIN-NUMERO";
 
-    // Construimos el HTML del certificado
     const html = buildCertificateHtml(data);
 
-    // Llamada a HTML2PDF.app
     const apiKey = process.env.HTML2PDF_API_KEY;
     if (!apiKey) {
       return res.status(500).json({
@@ -64,9 +55,7 @@ export default async function handler(req, res) {
   }
 }
 
-/* ===========================
-   Construcción del HTML
-   =========================== */
+/* ============ HTML DEL CERTIFICADO (VERSIÓN DEMO PARA PROBAR) ============ */
 
 function buildCertificateHtml(data) {
   const cert = data.certificado || {};
@@ -74,31 +63,22 @@ function buildCertificateHtml(data) {
   const cond = data.condiciones || {};
   const resumen = data.resumenGlobal || {};
   const bloques = data.bloquesResultados || [];
-  const traz = data.trazabilidad || {};
-  const firma = data.firma || {};
 
-  // Logo: usa una URL que ya tengas en tu proyecto
-  // o define TMP_LOGO_URL en variables de entorno de Vercel
   const logoUrl =
     process.env.TMP_LOGO_URL ||
     "https://tmp-backend-certificados.vercel.app/logo-tmp.png";
 
-  // Datos corporativos que me has pasado
   const companyLine1 = "Talleres Mecánicos Paramio S.L.";
   const companyLine2 = "C/ Real, 123 · 28981 Parla (Madrid) · SPAIN";
   const companyLine3 = "Irayo@tmparamio.com";
 
-  // URL de verificación (para el QR)
   const verificacionUrl = `https://tmp-backend-certificados.vercel.app/certificado?numero=${encodeURIComponent(
     cert.numero || ""
   )}`;
-
-  // QR sencillo usando un servicio público
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(
     verificacionUrl
   )}`;
 
-  // Tabla de resultados por bloque / punto
   const tablaResultadosHtml = buildResultadosTableHtml(bloques);
 
   return `
@@ -260,7 +240,6 @@ function buildCertificateHtml(data) {
 <body>
 <div class="page">
 
-  <!-- CABECERA -->
   <header>
     <img src="${logoUrl}" alt="TMP" class="logo" />
     <div class="head-text">
@@ -280,128 +259,37 @@ function buildCertificateHtml(data) {
     </div>
   </header>
 
-  <!-- 1. FICHA DEL INSTRUMENTO -->
-  <h2 class="section-title">1. Datos del instrumento</h2>
+  <h2 class="section-title">Certificado DEMO</h2>
   <div class="block">
-    <div class="two-cols">
-      <div class="col">
-        <p><b>Código:</b> ${escapeHtml(ins.codigo || "")}</p>
-        <p><b>Descripción:</b> ${escapeHtml(ins.descripcion || "")}</p>
-        <p><b>Fabricante / Tipo:</b> ${escapeHtml(
-          ins.fabricante_tipo || ""
-        )}</p>
-        <p><b>Nº de serie:</b> ${escapeHtml(ins.numero_serie || "—")}</p>
-      </div>
-      <div class="col">
-        <p><b>Rango de medida:</b> ${escapeHtml(ins.rango || "—")}</p>
-        <p><b>Unidad base:</b> ${escapeHtml(ins.unidad_base || "mm")}</p>
-        <p><b>Última calibración:</b> ${escapeHtml(
-          ins.fecha_calibracion_anterior || ins.fecha_ultima_cal || "—"
-        )}</p>
-        <p><b>Próxima calibración:</b> ${escapeHtml(
-          ins.fecha_proxima_calibracion || "—"
-        )}</p>
-      </div>
-    </div>
+    <p>Esta es una versión de prueba del certificado, generada desde
+    <b>/api/generar-certificado-oficial</b> usando HTML2PDF.app.</p>
+    <p><b>Código instrumento:</b> ${escapeHtml(ins.codigo || "DEMO-001")}</p>
+    <p><b>Descripción:</b> ${escapeHtml(ins.descripcion || "Instrumento demo")}</p>
   </div>
 
-  <!-- 2. CONDICIONES AMBIENTALES -->
-  <h2 class="section-title">2. Condiciones ambientales</h2>
-  <div class="block">
-    <div class="two-cols">
-      <div class="col">
-        <p><b>Temperatura:</b> ${escapeHtml(
-          cond.temperatura || ""
-        )} °C</p>
-        <p><b>Humedad relativa:</b> ${escapeHtml(
-          cond.humedad || ""
-        )} %</p>
-        <p><b>Fecha calibración:</b> ${escapeHtml(
-          cond.fecha_calibracion || ""
-        )}</p>
-      </div>
-      <div class="col">
-        <p><b>Observaciones ambientales:</b></p>
-        <p class="mini">${escapeHtml(cond.observaciones || "—")}</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- 3. MÉTODO Y CRITERIO -->
-  <h2 class="section-title">3. Método de calibración y criterio de aceptación</h2>
-  <div class="block">
-    <p class="mini">
-      La calibración se realiza comparando las indicaciones del instrumento con los valores
-      nominales de un patrón materializado trazable. Para cada punto se calcula el error
-      <b>E = I − R</b>, donde I es la media de las indicaciones y R la referencia
-      (patrón o nominal del instrumento).<br/>
-      La incertidumbre expandida U (k = 2) se obtiene combinando la incertidumbre del patrón
-      y las contribuciones del proceso de medida, con un nivel de confianza aproximado del 95 %. 
-      El criterio de aceptación aplicado es el recomendado en la guía <b>ILAC-G8</b>:
-      <br/>|E| + U ≤ T → APTO · |E| − U &gt; T → NO APTO · resto → INDETERMINADO.
-    </p>
-  </div>
-
-  <!-- 4. RESULTADOS DETALLADOS -->
-  <h2 class="section-title">4. Resultados detallados</h2>
   ${tablaResultadosHtml}
 
-  <!-- 5. RESUMEN GLOBAL -->
-  <h2 class="section-title">5. Resumen global de la calibración</h2>
+  <h2 class="section-title">Resumen global (demo)</h2>
   <div class="block summary-box">
     <p>
-      <b>Nº de bloques:</b> ${resumen.num_bloques || bloques.length || 0} ·
-      <b>Nº total de puntos:</b> ${resumen.num_puntos || 0}<br/>
-      <b>Máx |E| (µm):</b> ${formatNum(resumen.max_abs_error_um)} ·
-      <b>Máx (|E| + U) (µm):</b> ${formatNum(
-        resumen.max_abs_error_plus_u_um
-      )} ·
-      <b>Tolerancia global (µm):</b> ${formatNum(resumen.tolerancia_global_um)}
-      <br/>
-      <b>Decisión global (ILAC-G8):</b>
-      ${buildDecisionPill(resumen.decision_global || "APTO")}
+      <b>Decisión global:</b> ${buildDecisionPill(
+        resumen.decision_global || "APTO"
+      )}
     </p>
   </div>
 
-  <!-- 6. TRAZABILIDAD -->
-  <h2 class="section-title">6. Trazabilidad metrológica</h2>
-  <div class="block">
-    <p class="mini">
-      La trazabilidad metrológica se garantiza mediante el uso de patrones materializados cuyo
-      estado de calibración se controla en el sistema de gestión del laboratorio.
-    </p>
-    <p class="mini"><b>Patrones empleados:</b> ${escapeHtml(
-      traz.patrones || "No informado"
-    )}</p>
-    <p class="mini">
-      Las correcciones e incertidumbres asociadas a los patrones proceden de sus certificados
-      de calibración emitidos por laboratorios acreditados o por interpolación según los
-      procedimientos internos de TMP.
-    </p>
-  </div>
-
-  <!-- 7. VALIDACIÓN DEL INFORME Y QR -->
-  <h2 class="section-title">7. Validación del certificado</h2>
   <div class="footer">
     <div class="firma">
       <div class="firma-box">
-        <div><b>Operario responsable:</b> ${escapeHtml(
-          firma.nombre || ""
-        )}</div>
-        <div><b>Fecha próxima calibración:</b> ${escapeHtml(
-          firma.fecha_proxima || ""
-        )}</div>
-        <div class="mini" style="margin-top:6px;">
-          La firma manuscrita se conserva en el soporte digital interno junto con el presente certificado.
-        </div>
+        <div><b>Operario responsable:</b> DEMO</div>
+        <div class="mini">La firma manuscrita se conserva en el archivo interno.</div>
       </div>
     </div>
     <div class="qr">
-      <div class="mini"><b>Verificación mediante código QR</b></div>
+      <div class="mini"><b>Verificación QR (demo)</b></div>
       <img src="${qrUrl}" alt="QR certificado" width="120" height="120" />
       <div class="mini">
-        Al escanear el código se accede a la página de verificación del certificado:
-        <br/><span>${verificacionUrl}</span>
+        URL: ${verificacionUrl}
       </div>
     </div>
   </div>
@@ -416,7 +304,7 @@ function buildResultadosTableHtml(bloques) {
   if (!Array.isArray(bloques) || !bloques.length) {
     return `
       <div class="block">
-        <p class="mini">No se han proporcionado resultados de puntos de calibración.</p>
+        <p class="mini">No se han proporcionado resultados de puntos (demo).</p>
       </div>`;
   }
 
@@ -442,9 +330,9 @@ function buildResultadosTableHtml(bloques) {
       return `
       <div class="block">
         <h3 class="sub-title">
-          Bloque ${i + 1}: ${escapeHtml(b.tipo || "")} · ${
+          Bloque ${i + 1}: ${escapeHtml(b.tipo || "DEMO")} · ${
         b.nombre_patron ? escapeHtml(b.nombre_patron) : ""
-      } · Lado ${escapeHtml(b.lado || "GO")}
+      }
         </h3>
         <table>
           <thead>
@@ -468,8 +356,6 @@ function buildResultadosTableHtml(bloques) {
     .join("");
 }
 
-/* ========= Utilidades simples ========= */
-
 function escapeHtml(str = "") {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -487,7 +373,6 @@ function formatNum(v, dec = 1) {
 
 function buildDecisionPill(dec) {
   const d = (dec || "").toUpperCase();
-  const text = d || "APTO";
   if (d === "NO APTO") {
     return `<span class="pill pill-bad">NO APTO</span>`;
   }
