@@ -5,13 +5,14 @@ export default async function handler(req, res) {
 
   try {
     const { html } = req.body;
+
     if (!html) {
-      return res.status(400).json({ error: "Missing HTML" });
+      return res.status(400).json({ error: "Missing HTML content" });
     }
 
     const apiKey = process.env.HTML2PDF_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "PDF API key not configured" });
+      return res.status(500).json({ error: "API key missing" });
     }
 
     const response = await fetch("https://api.html2pdf.app/v1/generate", {
@@ -19,29 +20,29 @@ export default async function handler(req, res) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         html,
-        apiKey,
-        options: {
-          format: "A4",
-          margin: "1cm",
-          // más opciones si quieres: land­scape, header/footer, etc.
-        }
+        apiKey
       })
     });
 
     if (!response.ok) {
-      const txt = await response.text();
-      return res.status(500).json({ error: "PDF generation failed", details: txt });
+      const text = await response.text();
+      return res.status(500).json({
+        error: "Error generating PDF",
+        details: text
+      });
     }
 
-    const arrayBuf = await response.arrayBuffer();
-    const pdfBuffer = Buffer.from(arrayBuf);
+    const pdfBuffer = Buffer.from(await response.arrayBuffer());
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'attachment; filename="certificado.pdf"');
+    res.setHeader("Content-Disposition", "attachment; filename=certificado.pdf");
+
     return res.send(pdfBuffer);
 
-  } catch (err) {
-    console.error("PDF generation error:", err);
-    return res.status(500).json({ error: "Internal server error", details: err.toString() });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Unexpected server error",
+      details: error.toString()
+    });
   }
 }
