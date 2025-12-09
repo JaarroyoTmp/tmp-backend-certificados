@@ -1,4 +1,4 @@
-import pdfcrowd from "pdfcrowd";
+const pdfcrowd = require("pdfcrowd");
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -12,20 +12,24 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: "Missing HTML content" });
         }
 
-        // Crear cliente PDFCrowd con tus credenciales
-        const client = new pdfcrowd.HtmlToPdfClient(
-            process.env.PDFCROWD_USERNAME,
-            process.env.PDFCROWD_API_KEY
-        );
+        // Credenciales desde Vercel
+        const username = process.env.PDFCROWD_USERNAME;
+        const apiKey = process.env.PDFCROWD_API_KEY;
 
-        // Convertir el HTML a PDF (PDFcrowd devuelve un Buffer)
+        // Crear cliente PDFCrowd
+        const client = new pdfcrowd.HtmlToPdfClient(username, apiKey);
+
+        // Convertir HTML → PDF (PDFCrowd trabaja con callbacks)
         const pdfBuffer = await new Promise((resolve, reject) => {
-            client.convertString(html, (pdf) => resolve(pdf), (err) => reject(err));
+            client.convertString(html,
+                (pdf) => resolve(Buffer.from(pdf)),
+                (err) => reject(err)
+            );
         });
 
-        // Enviar el PDF al navegador
+        // Respuesta hacia el navegador
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", "attachment; filename=certificado.pdf");
+        res.setHeader("Content-Disposition", "inline; filename=certificado.pdf");
         return res.send(pdfBuffer);
 
     } catch (error) {
