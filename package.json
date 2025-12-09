@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend para generar PDF usando PDFCrowd",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "start": "node server.js"
