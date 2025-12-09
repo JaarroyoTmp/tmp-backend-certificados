@@ -12,25 +12,25 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: "Missing HTML content" });
         }
 
+        // Crear cliente PDFCrowd
         const client = new pdfcrowd.HtmlToPdfClient(
             process.env.PDFCROWD_USERNAME,
             process.env.PDFCROWD_API_KEY
         );
 
-        // STREAM del PDF directamente a memoria para enviarlo después
-        const chunks = [];
-        
-        await client.convertStringToStream(
-            html,
-            (chunk) => chunks.push(chunk),   // recibe datos
-            (err) => { throw err; }          // maneja errores
-        );
+        // Convertir HTML a PDF usando el SDK correcto
+        const pdfData = await new Promise((resolve, reject) => {
+            client.convertString(
+                html,
+                (data) => resolve(Buffer.from(data)),   // convertimos array → Buffer
+                (err) => reject(err)
+            );
+        });
 
-        const pdfBuffer = Buffer.concat(chunks);
-
+        // Enviar PDF al navegador
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", 'inline; filename="certificado.pdf"');
-        res.send(pdfBuffer);
+        res.setHeader("Content-Disposition", "attachment; filename=certificado.pdf");
+        return res.send(pdfData);
 
     } catch (error) {
         console.error("PDFCrowd error:", error);
