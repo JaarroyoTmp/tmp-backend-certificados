@@ -3,44 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <title>Prueba PDF</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 40px; }
-    button { padding: 12px 20px; font-size: 18px; cursor: pointer; }
-  </style>
 </head>
 <body>
+  <h1>Prueba de generación de PDF</h1>
+  <p>Haz clic en el botón para generar un PDF usando el backend.</p>
+  <button id="generarBtn">Generar PDF de prueba</button>
+  <p id="resultado"></p>
 
-<h1>Prueba de generación de PDF</h1>
-<p>Haz clic en el botón para generar un PDF usando el backend.</p>
+  <script>
+    document.getElementById("generarBtn").addEventListener("click", async () => {
+      document.getElementById("resultado").innerText = "Generando PDF...";
 
-<button onclick="generarPDF()">Generar PDF de prueba</button>
+      const html = `
+        <h1>Certificado de Prueba</h1>
+        <p>PDF generado con HTML2PDF.app desde Vercel.</p>
+      `;
 
-<p id="resultado"></p>
+      try {
+        const res = await fetch("/api/generar-certificado", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ html })
+        });
 
-<script>
-async function generarPDF() {
-  const html = `
-    <h1>PDF desde PDFCrowd</h1>
-    <p>Probando PDFCrowd desde Vercel.</p>
-  `;
+        if (!res.ok) {
+          const error = await res.json();
+          document.getElementById("resultado").innerText = "Error: " + (error.error || res.status);
+          return;
+        }
 
-  const res = await fetch("/api/generar-certificado", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html })
-  });
-
-  if (!res.ok) {
-    document.getElementById("resultado").innerText = "Error al generar PDF.";
-    return;
-  }
-
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
-}
-</script>
-
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        document.getElementById("resultado").innerText = "PDF generado!";
+      } catch (err) {
+        console.error(err);
+        document.getElementById("resultado").innerText = "Error al generar PDF.";
+      }
+    });
+  </script>
 
 </body>
 </html>
