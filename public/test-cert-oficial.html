@@ -18,7 +18,7 @@
 <body>
 
 <h1>Prueba de generación de Certificado Oficial</h1>
-<p>Pulsa el botón para llamar al endpoint <code>/api/generar-certificado-oficial</code> con datos de demo.</p>
+<p>Pulsa el botón para llamar al endpoint <code>/api/generar-certificado</code> con datos de demo.</p>
 
 <button id="btn">Generar certificado DEMO</button>
 
@@ -75,7 +75,7 @@
       ]
     };
 
-    const res = await fetch("/api/generar-certificado-oficial", {
+    const res = await fetch("/api/generar-certificado", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
