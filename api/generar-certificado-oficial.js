@@ -272,7 +272,7 @@ export default async function handler(req, res) {
 
     // 2) Crear URL de verificación y meterla en el JSON
     // ⬇️ CAMBIA "https://TU-DOMINIO" por tu dominio real (por ejemplo, el de Vercel)
-    const verificacionURL = `https://TU-DOMINIO/api/verificar-certificado?numero=${numero}`;
+    const verificacionURL = `https://tmp-backend-certificados.vercel.app/api/verificar-certificado?numero=${numero}`;
     certJSON.qr = certJSON.qr || {};
     certJSON.qr.url_verificacion = verificacionURL;
 
