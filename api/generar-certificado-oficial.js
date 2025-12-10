@@ -3,7 +3,7 @@
 // ==========================================
 import { createClient } from "@supabase/supabase-js";
 import PDFDocument from "pdfkit";
-// import { Readable } from "stream"; // No lo usamos de momento
+import QRCode from "qrcode"; // 🟢 NUEVO: librería para generar QR
 
 // ==== CONFIG ====
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -57,7 +57,7 @@ async function generarNumeroCertificado() {
 // ==========================================
 // Generar PDF oficial de calibración (plantilla profesional)
 // ==========================================
-function generarPDF(certJSON, numero) {
+async function generarPDF(certJSON, numero) {
   const doc = new PDFDocument({
     size: "A4",
     margin: 40,
@@ -70,9 +70,25 @@ function generarPDF(certJSON, numero) {
 
   const chunks = [];
   doc.on("data", chunks.push.bind(chunks));
-  doc.on("end", () => {});
 
   const hoyISO = new Date().toISOString().substring(0, 10);
+
+  // URL de verificación (ya viene en certJSON.qr.url_verificacion)
+  const urlVerif = certJSON.qr?.url_verificacion || "";
+
+  // ================================
+  // GENERAR QR (si hay URL de verificación)
+  // ================================
+  let qrBuffer = null;
+  if (urlVerif) {
+    try {
+      qrBuffer = await QRCode.toBuffer(urlVerif, {
+        errorCorrectionLevel: "M",
+      });
+    } catch (e) {
+      console.error("Error generando QR:", e);
+    }
+  }
 
   // ========== ENCABEZADO ==========
   doc.fontSize(20).text("CERTIFICADO DE CALIBRACIÓN", { align: "center" });
@@ -80,6 +96,22 @@ function generarPDF(certJSON, numero) {
   doc.fontSize(12).text(`Número: ${numero}`, { align: "center" });
   doc.text(`Fecha de emisión: ${hoyISO}`, { align: "center" });
   doc.moveDown(1);
+
+  // QR en la esquina superior derecha
+  if (qrBuffer) {
+    try {
+      // Ajusta posiciones si quieres mover el QR
+      doc.image(qrBuffer, 430, 40, { fit: [120, 120] });
+      doc.fontSize(8).text(
+        "Verificación online",
+        430,
+        165,
+        { width: 120, align: "center" }
+      );
+    } catch (e) {
+      console.error("No se pudo dibujar el QR en el PDF:", e);
+    }
+  }
 
   doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
 
@@ -206,9 +238,8 @@ function generarPDF(certJSON, numero) {
   doc.moveDown(2);
 
   // ==========================================
-  // 7 · VERIFICACIÓN Y QR (opcional)
+  // 7 · VERIFICACIÓN DEL CERTIFICADO
   // ==========================================
-  const urlVerif = certJSON.qr?.url_verificacion;
   doc.fontSize(12).text("Verificación del certificado", { underline: true });
   doc.moveDown(0.5);
   doc.fontSize(10).text(
@@ -216,8 +247,6 @@ function generarPDF(certJSON, numero) {
       ? `Puede verificar la validez de este certificado en: ${urlVerif}`
       : "URL de verificación no disponible."
   );
-
-  // Aquí podrías generar un QR real con una librería y dibujarlo con doc.image()
 
   doc.end();
 
@@ -242,11 +271,12 @@ export default async function handler(req, res) {
     const numero = await generarNumeroCertificado();
 
     // 2) Crear URL de verificación y meterla en el JSON
-    const verificacionURL = `https://TU-DOMINIO/cert/${numero}`;
+    // ⬇️ CAMBIA "https://TU-DOMINIO" por tu dominio real (por ejemplo, el de Vercel)
+    const verificacionURL = `https://TU-DOMINIO/api/verificar-certificado?numero=${numero}`;
     certJSON.qr = certJSON.qr || {};
     certJSON.qr.url_verificacion = verificacionURL;
 
-    // 3) Crear PDF oficial con la plantilla profesional
+    // 3) Crear PDF oficial con la plantilla profesional (ya con QR)
     const pdfBuffer = await generarPDF(certJSON, numero);
 
     // 4) Subir PDF
