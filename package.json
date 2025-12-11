@@ -1,14 +1,16 @@
 {
   "name": "tmp-backend-certificados",
   "version": "1.0.0",
-  "description": "Backend para generar PDF usando PDFCrowd",
+  "description": "Backend para generar PDF usando PDFKit",
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
     "start": "node server.js"
   },
   "dependencies": {
-    "pdfcrowd": "^5.11.0"
-    "qrcode": "^1.5.3"
+    "pdfcrowd": "^5.11.0",
+    "qrcode": "^1.5.3",
+    "pdfkit": "^0.13.0",
+    "@supabase/supabase-js": "^2.45.5"
   }
 }
