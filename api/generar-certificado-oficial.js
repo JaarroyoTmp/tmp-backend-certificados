@@ -4,7 +4,9 @@ export const config = {
       sizeLimit: "15mb",
     },
   },
+  runtime: "nodejs",
 };
+
 
 // ==========================================
 // API: generar-certificado-oficial (PRO)
@@ -771,13 +773,17 @@ export default async function handler(req, res) {
     certJSON.qr.url_verificacion = verificacionURL;
 
     // 3) Generar PDF PRO
+    if (certJSON.firma?.firma_base64?.length > 400000) {
+  console.warn("Firma demasiado grande, se omite del PDF");
+  certJSON.firma.firma_base64 = null;
+}
+
     const pdfBuffer = await generarPDF(certJSON, numero);
 
     // 4) Subir PDF a Storage
     const pdfURL = await subirPDF(pdfBuffer, `${numero}.pdf`);
 
     // 5) Decisión global (si viene en resumen, respétala; si no, la calculamos)
-    const certNorm = normalizeCertData(certJSON);
     const resumenTxt = certJSON.resumen_global || "";
     let decisionGlobal = certNorm._globalStats?.decisionGlobal || "APTO";
     if (resumenTxt.includes("NO APTO")) decisionGlobal = "NO APTO";
