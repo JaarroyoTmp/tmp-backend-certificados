@@ -1,3 +1,11 @@
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "15mb",
+    },
+  },
+};
+
 // ==========================================
 // API: generar-certificado-oficial (PRO)
 // ISO/IEC 17025 + ILAC-G8
