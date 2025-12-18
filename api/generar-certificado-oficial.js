@@ -783,11 +783,13 @@ export default async function handler(req, res) {
     // 4) Subir PDF a Storage
     const pdfURL = await subirPDF(pdfBuffer, `${numero}.pdf`);
 
-    // 5) Decisión global (si viene en resumen, respétala; si no, la calculamos)
-    const resumenTxt = certJSON.resumen_global || "";
-    let decisionGlobal = certNorm._globalStats?.decisionGlobal || "APTO";
-    if (resumenTxt.includes("NO APTO")) decisionGlobal = "NO APTO";
-    else if (resumenTxt.includes("INDETERMINADO")) decisionGlobal = "INDETERMINADO";
+    // 5) Decisión global
+const resumenTxt = certJSON.resumen_global || "";
+let decisionGlobal = "APTO";
+
+if (resumenTxt.includes("NO APTO")) decisionGlobal = "NO APTO";
+else if (resumenTxt.includes("INDETERMINADO"))
+  decisionGlobal = "INDETERMINADO";
 
     // 6) Guardar en Supabase (JSON limpio, sin firma_base64)
     const datosParaBD = limpiarCertJSONParaBD(certJSON, {
