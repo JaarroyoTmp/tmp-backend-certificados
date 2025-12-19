@@ -7,6 +7,33 @@ export const config = {
   runtime: "nodejs",
 };
 
+// ==========================================
+// Generar número oficial de certificado
+// CC-YYYY-XXXX
+// ==========================================
+async function generarNumeroCertificado() {
+  const year = new Date().getFullYear();
+
+  const { data, error } = await supabase
+    .from("certificados")
+    .select("numero")
+    .like("numero", `CC-${year}-%`);
+
+  if (error) throw error;
+
+  const nums = (data || []).map((r) => {
+    const m = r.numero?.match(/CC-\d+-(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+
+  const next = (Math.max(0, ...nums) + 1)
+    .toString()
+    .padStart(4, "0");
+
+  return `CC-${year}-${next}`;
+}
+
+
 export default async function handler(req, res) {
   console.log(">>> START generar-certificado-oficial", {
     method: req.method,
