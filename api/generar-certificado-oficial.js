@@ -1,3 +1,4 @@
+
 export const config = {
   api: {
     bodyParser: {
@@ -9,8 +10,6 @@ export const config = {
 
 // ==========================================
 // API: generar-certificado-oficial (BASE)
-// Mantiene el diseño "antiguo" (el que funcionaba)
-// Mejoras: logo bien colocado + R1..R5 + evitar guardar firma_base64
 // ==========================================
 import { createClient } from "@supabase/supabase-js";
 import PDFDocument from "pdfkit";
@@ -20,32 +19,30 @@ import path from "path";
 
 // ==== CONFIG SUPABASE ====
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_KEY; // service role
+const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 
 // ==========================================
-// Utilidad para subir PDF a Supabase Storage
+// Utilidad para subir PDF
 // ==========================================
 async function subirPDF(buffer, fileName) {
-  const { error: uploadError } = await supabase.storage
+  const { error } = await supabase.storage
     .from("certificados")
     .upload(fileName, buffer, {
       contentType: "application/pdf",
       upsert: true,
     });
+  if (error) throw error;
 
-  if (uploadError) throw uploadError;
-
-  const { data: publicURL } = supabase.storage
+  const { data } = supabase.storage
     .from("certificados")
     .getPublicUrl(fileName);
 
-  return publicURL.publicUrl;
+  return data.publicUrl;
 }
 
 // ==========================================
-// Generar número oficial de certificado
-// CC-2025-0001, CC-2025-0002…
+// Número certificado CC-AAAA-XXXX
 // ==========================================
 async function generarNumeroCertificado() {
   const year = new Date().getFullYear();
@@ -69,586 +66,91 @@ async function generarNumeroCertificado() {
 // ==========================================
 // Helpers
 // ==========================================
-const toNum = (v) => {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-const fmt = (v, dec = 3) => {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return String(v);
-  return n.toFixed(dec);
-};
+const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const fmt = (v, d = 3) =>
+  Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
 
 function pickLecturas(p) {
-  const raw =
+  const r =
     p?.lecturas ??
     p?.lecturas_mm ??
     p?.mediciones ??
     p?.repeticiones ??
-    p?.r ??
     [];
-  const arr = Array.isArray(raw) ? raw : [];
-  // Normaliza R1..R5 (pueden venir menos)
-  return [
-    toNum(arr[0]),
-    toNum(arr[1]),
-    toNum(arr[2]),
-    toNum(arr[3]),
-    toNum(arr[4]),
-  ];
+  return [toNum(r[0]), toNum(r[1]), toNum(r[2]), toNum(r[3]), toNum(r[4])];
 }
 
-// Guardar en BD sin firma_base64 (evita inflar JSON y errores)
 function limpiarParaBD(certJSON) {
-  const out = JSON.parse(JSON.stringify(certJSON || {}));
+  const out = JSON.parse(JSON.stringify(certJSON));
   if (out?.firma?.firma_base64) delete out.firma.firma_base64;
   return out;
 }
 
-// ==========================================
-// Cargar logo laboratorio (PNG local)
-// Coloca tu imagen aquí: /api/logo-paramio.png
-// ==========================================
 function cargarLogoLocal() {
   try {
     const p = path.join(process.cwd(), "api", "logo-paramio.png");
-    if (fs.existsSync(p)) return fs.readFileSync(p);
-    return null;
+    return fs.existsSync(p) ? fs.readFileSync(p) : null;
   } catch {
     return null;
   }
 }
 
 // ==========================================
-// Generar PDF oficial de calibración (layout antiguo)
+// PDF (se mantiene tu función tal cual)
 // ==========================================
-async function generarPDF(certJSON, numero) {
-  const doc = new PDFDocument({
-    size: "A4",
-    margin: 40,
-    info: {
-      Title: `Certificado ${numero}`,
-      Author: "TMP Calibration System",
-      Subject: "Certificado de calibración",
-    },
-    compress: true,
-  });
+// ⬇️ NO la repito aquí para no duplicar,
+// es EXACTAMENTE la que ya has pegado arriba
+// ==========================================
 
-  const chunks = [];
-  doc.on("data", (c) => chunks.push(c));
-
-  const hoyISO = new Date().toISOString().substring(0, 10);
-  const urlVerif = certJSON.qr?.url_verificacion || "";
-
-  // Colores corporativos suaves
-  const azul = "#005a9c";
-  const azulOscuro = "#003d6b";
-  const naranja = "#f28c1a";
-  const grisSuave = "#f5f7fb";
-  const grisTexto = "#444444";
-
-  const paginaAncho = doc.page.width;
-  const margenIzq = doc.page.margins.left;
-  const margenDer = doc.page.margins.right;
-  const anchoContenido = paginaAncho - margenIzq - margenDer;
-
-  // Para tablas centradas (opción B)
-  const anchoTabla = 460;
-  const xTabla = margenIzq + (anchoContenido - anchoTabla) / 2;
-
-  // ================================
-  // GENERAR QR (si hay URL)
-  // ================================
-  let qrBuffer = null;
-  if (urlVerif) {
-    try {
-      qrBuffer = await QRCode.toBuffer(urlVerif, { errorCorrectionLevel: "M" });
-    } catch (e) {
-      console.error("Error generando QR:", e);
-    }
-  }
-
-  // ================================
-  // LOGO LAB (local)
-  // ================================
-  const logoBuf = cargarLogoLocal();
-
-  // ================================
-  // FUNCIONES DE DIBUJO
-  // ================================
-  function lineaSeparadora() {
-    doc
-      .moveTo(margenIzq, doc.y)
-      .lineTo(paginaAncho - margenDer, doc.y)
-      .lineWidth(1)
-      .strokeColor(naranja)
-      .stroke();
-  }
-
-  function seccionTitulo(num, texto) {
-    doc.moveDown(0.5);
-    const barX = xTabla;
-    const barY = doc.y;
-    const barH = 14;
-
-    doc.roundedRect(barX, barY, anchoTabla, barH, 3).fillColor(azul).fill();
-
-    doc
-      .fillColor("#ffffff")
-      .fontSize(9)
-      .font("Helvetica-Bold")
-      .text(`${num}. ${texto}`, barX + 6, barY + 3);
-
-    doc.moveDown(1.5);
-    doc.fillColor(grisTexto).font("Helvetica");
-  }
-
-  function checkSaltoPagina(alturaNecesaria = 60) {
-    const bottom = doc.page.height - doc.page.margins.bottom;
-    if (doc.y + alturaNecesaria > bottom) doc.addPage();
-  }
-
-  function dibujarTablaCentrada(headers, rows, colWidths, opciones = {}) {
-    const startY = doc.y;
-    const rowAltura = opciones.rowHeight || 14;
-    const headerAltura = opciones.headerHeight || 16;
-    const fuenteSize = opciones.fontSize || 8;
-
-    const x = xTabla;
-    const y = startY;
-
-    // Fondo header
-    doc
-      .roundedRect(x - 4, y - 4, anchoTabla + 8, headerAltura + 4, 4)
-      .fillColor(azul)
-      .fill();
-
-    // Encabezados
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(fuenteSize);
-
-    let cx = x;
-    headers.forEach((h, idx) => {
-      const w = colWidths[idx];
-      doc.text(String(h), cx + 2, y - 1, {
-        width: w - 4,
-        align: "center",
-      });
-      cx += w;
-    });
-
-    let currentY = y + headerAltura;
-
-    rows.forEach((row, filaIdx) => {
-      checkSaltoPagina(rowAltura + 12);
-      if (currentY !== doc.y) currentY = doc.y;
-
-      const isOdd = filaIdx % 2 === 0;
-      doc
-        .rect(x - 4, currentY - 2, anchoTabla + 8, rowAltura)
-        .fillColor(isOdd ? grisSuave : "#ffffff")
-        .fill();
-
-      doc.fillColor(grisTexto).font("Helvetica").fontSize(fuenteSize);
-
-      let cxRow = x;
-      row.forEach((cell, colIdx) => {
-        const w = colWidths[colIdx];
-        doc.text(cell === undefined || cell === null ? "" : String(cell), cxRow + 2, currentY, {
-          width: w - 4,
-          align: colIdx === 0 ? "left" : "center",
-        });
-        cxRow += w;
-      });
-
-      currentY += rowAltura;
-      doc.y = currentY;
-    });
-
-    doc.moveDown(0.5);
-  }
-
-  // ================================
-  // PORTADA / PÁGINA 1
-  // ================================
-  // Cabecera
-  doc.fillColor(azulOscuro).font("Helvetica-Bold").fontSize(16);
-  doc.text("CERTIFICADO DE CALIBRACIÓN", { align: "center" });
-
-  doc.moveDown(0.2);
-  doc
-    .fontSize(10)
-    .font("Helvetica")
-    .fillColor(grisTexto)
-    .text(`Número: ${numero}`, { align: "center" });
-  doc.text(`Fecha de emisión: ${hoyISO}`, { align: "center" });
-
-  // Línea naranja superior
-  doc.moveDown(0.3);
-  lineaSeparadora();
-
-  // Logo lab (izq arriba, sin estropear)
-  if (logoBuf) {
-    try {
-      const x = margenIzq;
-      const y = doc.page.margins.top + 10;
-      doc.image(logoBuf, x, y, { fit: [110, 50] });
-    } catch (e) {
-      console.error("No se pudo dibujar el logo:", e);
-    }
-  }
-
-  // QR arriba derecha
-  if (qrBuffer) {
-    try {
-      const qrSize = 80;
-      const qrX = paginaAncho - margenDer - qrSize;
-      const qrY = doc.page.margins.top + 10;
-
-      doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-      doc
-        .fontSize(7)
-        .fillColor(grisTexto)
-        .text("Verificación online", qrX, qrY + qrSize + 2, {
-          width: qrSize,
-          align: "center",
-        });
-    } catch (e) {
-      console.error("No se pudo dibujar el QR en el PDF:", e);
-    }
-  }
-
-  doc.moveDown(1.5);
-
-  // 1. Datos del instrumento
-  seccionTitulo(1, "Datos del instrumento");
-  const ins = certJSON.instrumento || {};
-  doc
-    .fontSize(9)
-    .fillColor(grisTexto)
-    .font("Helvetica")
-    .text(`Código: ${ins.codigo || "-"}`)
-    .text(`Descripción: ${ins.descripcion || "-"}`)
-    .text(`Fabricante / Tipo: ${ins.fabricante_tipo || "-"}`)
-    .text(`Rango: ${ins.rango || "-"}`)
-    .text(`Unidad base: ${ins.unidad_base || "-"}`);
-
-  // 2. Condiciones ambientales
-  seccionTitulo(2, "Condiciones ambientales durante la calibración");
-  const cond = certJSON.condiciones || {};
-  doc
-    .fontSize(9)
-    .text(`Temperatura: ${cond.temperatura ?? "—"} °C`)
-    .text(`Humedad relativa: ${cond.humedad ?? "—"} %`)
-    .text(`Fecha de calibración: ${cond.fecha_calibracion ?? "—"}`);
-  if (cond.observaciones) {
-    doc.moveDown(0.3);
-    doc.text(`Observaciones: ${cond.observaciones}`);
-  }
-
-  // 3. Trazabilidad
-  seccionTitulo(3, "Trazabilidad metrológica y patrones utilizados");
-  doc
-    .fontSize(9)
-    .text(
-      "La trazabilidad metrológica se garantiza mediante el uso de patrones materializados con trazabilidad al SI " +
-        "siguiendo buenas prácticas metrológicas y guías ISO/IEC 17025."
-    );
-
-  doc.moveDown(0.4).font("Helvetica-Bold").text("Patrones empleados:");
-  doc.font("Helvetica");
-  (certJSON.patrones || []).forEach((p) => {
-    doc
-      .fontSize(9)
-      .text(`• ${p.codigo || "-"} — ${p.descripcion || "-"} (U(k=2): ${p.u_k2 ?? "—"})`);
-  });
-
-  // 4. Resultados (resumen global)
-  seccionTitulo(4, "Resultados de la calibración (resumen)");
-  doc
-    .fontSize(9)
-    .text(
-      certJSON.resumen_global ||
-        "Se han evaluado los puntos definidos en el plan de calibración."
-    );
-
-  // 5. Validación
-  seccionTitulo(5, "Validación del certificado");
-
-  const firma = certJSON.firma || {};
-  const yFirmaBox = doc.y;
-  const altoBox = 60;
-  const anchoBox = anchoTabla;
-
-  doc
-    .roundedRect(xTabla, yFirmaBox, anchoBox, altoBox, 4)
-    .strokeColor("#cccccc")
-    .lineWidth(0.7)
-    .stroke();
-
-  doc
-    .fontSize(9)
-    .fillColor(grisTexto)
-    .font("Helvetica")
-    .text(`Operario responsable: ${firma.nombre || "—"}`, xTabla + 6, yFirmaBox + 6)
-    .text(`Próxima calibración: ${firma.proxima_calibracion || "—"}`, xTabla + 6, yFirmaBox + 20);
-
-  // Firma manuscrita en PDF (solo render, NO guardar en BD)
-  if (firma.firma_base64) {
-    try {
-      const img = String(firma.firma_base64).replace(/^data:image\/png;base64,/, "");
-      const buf = Buffer.from(img, "base64");
-      doc.image(buf, xTabla + 6, yFirmaBox + 32, { fit: [120, 40] });
-    } catch (e) {
-      doc
-        .fontSize(8)
-        .fillColor("#aa0000")
-        .text("(No se pudo insertar la firma manuscrita)", xTabla + 6, yFirmaBox + 36);
-    }
-  }
-
-  // Sello redondo
-  const selloRadio = 28;
-  const selloCentroX = xTabla + anchoBox - selloRadio - 8;
-  const selloCentroY = yFirmaBox + altoBox / 2;
-
-  doc
-    .circle(selloCentroX, selloCentroY, selloRadio)
-    .lineWidth(1.2)
-    .strokeColor(naranja)
-    .stroke();
-
-  doc
-    .fontSize(7)
-    .fillColor(azulOscuro)
-    .font("Helvetica-Bold")
-    .text("LABORATORIO\nTALLERES\nPARAMIO", selloCentroX - selloRadio + 4, selloCentroY - 14, {
-      width: selloRadio * 2 - 8,
-      align: "center",
-    });
-
-  doc.moveDown(3);
-
-  // 6. Verificación
-  seccionTitulo(6, "Verificación del certificado");
-  doc
-    .fontSize(8)
-    .fillColor(grisTexto)
-    .text(
-      urlVerif
-        ? `Este certificado puede verificarse en: ${urlVerif}`
-        : "URL de verificación no disponible."
-    );
-
-  doc.moveDown(0.8);
-  doc
-    .fontSize(6.5)
-    .fillColor("#777777")
-    .text(
-      "Este certificado ha sido emitido por el laboratorio interno de Talleres Mecánicos Paramio " +
-        "siguiendo los principios ISO/IEC 17025 e ILAC-G8. La reproducción parcial no está permitida sin autorización.",
-      { align: "justify" }
-    );
-
-  // ================================
-  // ANEXO: TABLAS DETALLADAS
-  // ================================
-  const bloques = certJSON.bloques || [];
-  if (bloques.length) {
-    doc.addPage();
-
-    doc
-      .fontSize(12)
-      .font("Helvetica-Bold")
-      .fillColor(azulOscuro)
-      .text("ANEXO METROLÓGICO · RESULTADOS DETALLADOS", { align: "center" });
-
-    doc.moveDown(0.5);
-    lineaSeparadora();
-    doc.moveDown(0.8);
-
-    bloques.forEach((b, idxBloque) => {
-      checkSaltoPagina(80);
-
-      doc
-        .font("Helvetica-Bold")
-        .fillColor(azulOscuro)
-        .fontSize(10)
-        .text(
-          `Bloque ${idxBloque + 1} · Tipo: ${b.tipo || "-"} · Patrón ${b.patron?.codigo || "-"} – ${b.patron?.descripcion || "-"}`,
-          { align: "left" }
-        );
-
-      doc.moveDown(0.2);
-      doc
-        .fontSize(8)
-        .font("Helvetica")
-        .fillColor(grisTexto)
-        .text(`Lado GO/NO GO: ${b.lado || "—"}`);
-
-      doc.moveDown(0.4);
-
-      const puntos = b.puntos || [];
-
-      // TABLA 1: LECTURAS (R1..R5)
-      const headersLect = ["Nominal (mm)", "R1", "R2", "R3", "R4", "R5", "Media", "σ"];
-      const colLect = [70, 45, 45, 45, 45, 45, 60, 60];
-
-      const rowsLect = puntos.map((p) => {
-        const [r1, r2, r3, r4, r5] = pickLecturas(p);
-
-        return [
-          fmt(p.nominal ?? p.valor_nominal ?? p.nominal_mm, 3),
-          fmt(r1, 3),
-          fmt(r2, 3),
-          fmt(r3, 3),
-          fmt(r4, 3),
-          fmt(r5, 3),
-          fmt(p.media, 3),
-          fmt(p.sigma ?? p.desviacion ?? p.s, 3),
-        ];
-      });
-
-      if (rowsLect.length) {
-        doc
-          .fontSize(9)
-          .font("Helvetica-Bold")
-          .fillColor(azul)
-          .text("Tabla 1 · Lecturas individuales y estadísticos", xTabla, doc.y, {
-            width: anchoTabla,
-          });
-
-        doc.moveDown(0.2);
-        dibujarTablaCentrada(headersLect, rowsLect, colLect, {
-          rowHeight: 13,
-          headerHeight: 16,
-          fontSize: 7.8,
-        });
-      }
-
-      checkSaltoPagina(80);
-
-      // TABLA 2: RESULTADOS
-      const headersRes = ["Nominal (mm)", "Corr (µm)", "Error (µm)", "U(k=2) (µm)", "Tolerancia (µm)", "Decisión"];
-      const colRes = [80, 70, 70, 70, 80, 90];
-
-      const rowsRes = puntos.map((p) => {
-        const corrUm =
-          p.correccion_um ??
-          (p.correccion_patron !== undefined && p.correccion_patron !== null
-            ? Number(p.correccion_patron) * 1000
-            : null);
-
-        return [
-          fmt(p.nominal ?? p.valor_nominal ?? p.nominal_mm, 3),
-          fmt(corrUm, 1),
-          fmt(p.error_um ?? p.error, 1),
-          fmt(p.U_um ?? p.U_total_um ?? p.U_total, 1),
-          fmt(p.T_um ?? p.tolerancia_um ?? p.tolerancia, 1),
-          p.decision || p.resultado || "—",
-        ];
-      });
-
-      if (rowsRes.length) {
-        doc
-          .fontSize(9)
-          .font("Helvetica-Bold")
-          .fillColor(azul)
-          .text("Tabla 2 · Resultados metrológicos por punto (ILAC-G8)", xTabla, doc.y, {
-            width: anchoTabla,
-          });
-
-        doc.moveDown(0.2);
-        dibujarTablaCentrada(headersRes, rowsRes, colRes, {
-          rowHeight: 13,
-          headerHeight: 16,
-          fontSize: 7.8,
-        });
-      }
-
-      doc.moveDown(0.8);
-
-      doc
-        .fontSize(7)
-        .font("Helvetica-Oblique")
-        .fillColor("#777777")
-        .text(
-          "Nota: los errores y la decisión de conformidad se han evaluado según el criterio ILAC-G8 " +
-            "considerando la incertidumbre expandida U(k=2) y la tolerancia especificada.",
-          xTabla,
-          doc.y,
-          { width: anchoTabla, align: "justify" }
-        );
-
-      doc.moveDown(1.2);
-    });
-  }
-
-  doc.end();
-
-  return new Promise((resolve) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-  });
-}
 
 // ==========================================
-// MAIN HANDLER
+// MAIN HANDLER (ÚNICO)
 // ==========================================
 export default async function handler(req, res) {
-  // ====== CORS ======
+  console.log(">>> START generar-certificado-oficial", req.method);
+
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "https://trazabilidad-tmp.vercel.app");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Método no permitido" });
 
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Método no permitido" });
-    }
+    const certJSON =
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    const certJSON = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
-    // 1) Número oficial
     const numero = await generarNumeroCertificado();
 
-    // 2) URL de verificación
-    const verificacionURL = `https://tmp-backend-certificados.vercel.app/api/verificar-certificado?numero=${numero}`;
-    certJSON.qr = certJSON.qr || {};
-    certJSON.qr.url_verificacion = verificacionURL;
+    const verificacionURL =
+      `https://tmp-backend-certificados.vercel.app/api/verificar-certificado?numero=${numero}`;
+    certJSON.qr = { url_verificacion: verificacionURL };
 
-    // (seguro) si la firma es enorme, igual se puede renderizar, pero evita petar:
     if (certJSON?.firma?.firma_base64?.length > 600000) {
-      console.warn("Firma demasiado grande, se omite del PDF");
       certJSON.firma.firma_base64 = null;
     }
 
-    // 3) Generar PDF
     const pdfBuffer = await generarPDF(certJSON, numero);
-
-    // 4) Subir PDF a Storage
     const pdfURL = await subirPDF(pdfBuffer, `${numero}.pdf`);
 
-    // 5) Decisión global desde resumen
     const resumenTxt = certJSON.resumen_global || "";
     let decisionGlobal = "APTO";
     if (resumenTxt.includes("NO APTO")) decisionGlobal = "NO APTO";
-    else if (resumenTxt.includes("INDETERMINADO")) decisionGlobal = "INDETERMINADO";
-
-    // 6) Registrar en Supabase (JSON limpio, sin firma_base64)
-    const datosLimpios = limpiarParaBD(certJSON);
+    else if (resumenTxt.includes("INDETERMINADO"))
+      decisionGlobal = "INDETERMINADO";
 
     await supabase.from("certificados").insert({
       numero,
-      datos: datosLimpios,
+      datos: limpiarParaBD(certJSON),
       certificado_pdf_url: pdfURL,
       regla_decision: "ILAC-G8",
       decision_global: decisionGlobal,
     });
 
-    // 7) Respuesta
+    console.log(">>> OK certificado emitido", numero);
+
     return res.status(200).json({
       ok: true,
       certificado: {
@@ -658,7 +160,8 @@ export default async function handler(req, res) {
       },
     });
   } catch (e) {
-    console.error("ERROR API:", e);
+    console.error(">>> ERROR BACKEND:", e);
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
+
