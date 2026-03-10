@@ -93,9 +93,13 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-function fmtNum(v, dec = 1, fallback = "—") {
+function fmtNum(v, dec = 3, fallback = "—") {
   const n = toNum(v);
   return n === null ? fallback : n.toFixed(dec);
+}
+
+function fmtNum1(v, fallback = "—") {
+  return fmtNum(v, 1, fallback);
 }
 
 function fmtDate(v) {
@@ -117,51 +121,21 @@ function decisionColor(decision) {
   return "#334155";
 }
 
-function normalizarBloquesDesdeCert(cert) {
-  const out = [];
-
-  if (Array.isArray(cert?.bloques)) {
-    cert.bloques.forEach((b, idx) => {
-      out.push({
-        nombre: b?.tipo || b?.nombre || `Bloque ${idx + 1}`,
-        puntos: Array.isArray(b?.puntos) ? b.puntos.length : null,
-        decision: b?.decision || null,
-        maxAbsE: b?.max_abs_error_um ?? b?.maxAbsError ?? null,
-        maxAbsEplusU: b?.max_abs_error_plus_u_um ?? b?.maxAbsErrorPlusU ?? null,
-        tol: b?.tolerancia_um ?? b?.tol ?? null,
-      });
-    });
-  }
-
-  if (!out.length && cert?.resumen_global && typeof cert.resumen_global === "object") {
-    const rg = cert.resumen_global;
-    if (Array.isArray(rg.bloques)) {
-      rg.bloques.forEach((b, idx) => {
-        out.push({
-          nombre: b?.nombre || b?.tipo || `Bloque ${idx + 1}`,
-          puntos: b?.puntos ?? null,
-          decision: b?.decision || null,
-          maxAbsE: b?.max_abs_error_um ?? b?.maxAbsError ?? null,
-          maxAbsEplusU: b?.max_abs_error_plus_u_um ?? b?.maxAbsErrorPlusU ?? null,
-          tol: b?.tolerancia_um ?? b?.tol ?? null,
-        });
-      });
-    }
-  }
-
-  return out;
-}
-
 function inferirDecisionGlobal(cert) {
   if (cert?.decision_global) return safeText(cert.decision_global);
-  if (cert?.resumen_global && typeof cert.resumen_global === "string") {
+
+  if (cert?.resumen_global && typeof cert.resumen_global === "object" && cert.resumen_global.decision) {
+    return safeText(cert.resumen_global.decision);
+  }
+
+  if (typeof cert?.resumen_global === "string") {
     const txt = cert.resumen_global.toUpperCase();
     if (txt.includes("NO APTO")) return "NO APTO";
     if (txt.includes("INDETERMINADO")) return "INDETERMINADO";
     if (txt.includes("APTO")) return "APTO";
   }
 
-  const bloques = normalizarBloquesDesdeCert(cert);
+  const bloques = normalizarBloques(cert);
   const decisiones = bloques.map((b) => upper(b.decision));
 
   if (decisiones.includes("NO APTO")) return "NO APTO";
@@ -171,84 +145,125 @@ function inferirDecisionGlobal(cert) {
   return "—";
 }
 
-function construirTextoResumen(cert) {
+function normalizarPatrones(cert) {
+  if (!Array.isArray(cert?.patrones)) return [];
+  return cert.patrones.map((p, idx) => ({
+    codigo: p?.codigo || p?.id || `PAT-${idx + 1}`,
+    descripcion: p?.descripcion || "—",
+    u_k2: p?.u_k2 ?? p?.U ?? null,
+    nota: p?.nota || p?.observaciones || "—",
+  }));
+}
+
+function normalizarBloques(cert) {
+  if (!Array.isArray(cert?.bloques)) return [];
+
+  return cert.bloques.map((b, idx) => {
+    const puntos = Array.isArray(b?.puntos) ? b.puntos.map((p, pidx) => ({
+      id: p?.id || `${idx + 1}-${pidx + 1}`,
+      nominal: p?.nominal ?? p?.valor_nominal ?? null,
+      correccion_patron: p?.correccion_patron ?? null,
+      caracteristica: p?.caracteristica || "",
+      repeticiones: Array.isArray(p?.repeticiones) ? p.repeticiones : [],
+      media: p?.media ?? null,
+      sigma: p?.sigma ?? p?.s ?? null,
+      error: p?.error ?? null,
+      U: p?.U ?? p?.u_total ?? p?.u ?? null,
+      T: p?.T ?? p?.tol ?? p?.tolerancia ?? null,
+      decision: p?.decision ?? null,
+    })) : [];
+
+    return {
+      nombre: b?.tipo || b?.nombre || `Bloque ${idx + 1}`,
+      lado: b?.lado || "—",
+      patron_codigo: b?.patron?.codigo || b?.patron?.id || "—",
+      patron_descripcion: b?.patron?.descripcion || "—",
+      decision: b?.decision || null,
+      maxAbsE: b?.max_abs_error_um ?? b?.maxAbsError ?? null,
+      maxAbsEplusU: b?.max_abs_error_plus_u_um ?? b?.maxAbsErrorPlusU ?? null,
+      tol: b?.tolerancia_um ?? b?.tol ?? null,
+      puntos,
+    };
+  });
+}
+
+function construirTextoResumen(cert, bloques, decisionGlobal) {
   if (typeof cert?.resumen_global === "string" && cert.resumen_global.trim()) {
     return cert.resumen_global.trim();
   }
 
-  if (cert?.resumen_global && typeof cert.resumen_global === "object") {
-    const rg = cert.resumen_global;
-    const partes = [];
+  const totalPuntos = bloques.reduce((acc, b) => acc + b.puntos.length, 0);
 
-    if (rg.numero_bloques !== undefined) {
-      partes.push(`Número de bloques: ${safeText(rg.numero_bloques)}`);
-    }
-    if (rg.total_puntos !== undefined) {
-      partes.push(`Número total de puntos evaluados: ${safeText(rg.total_puntos)}`);
-    }
-    if (rg.maxAbsError !== undefined || rg.max_abs_error_um !== undefined) {
-      partes.push(`Máx |E| (µm): ${fmtNum(rg.maxAbsError ?? rg.max_abs_error_um, 1)}`);
-    }
-    if (rg.maxAbsErrorPlusU !== undefined || rg.max_abs_error_plus_u_um !== undefined) {
-      partes.push(`Máx (|E| + U) (µm): ${fmtNum(rg.maxAbsErrorPlusU ?? rg.max_abs_error_plus_u_um, 1)}`);
-    }
-    if (rg.tolerancia !== undefined || rg.tolerancia_um !== undefined) {
-      partes.push(`Tolerancia global (µm): ${fmtNum(rg.tolerancia ?? rg.tolerancia_um, 1)}`);
-    }
-    if (rg.decision) {
-      partes.push(`Decisión global según ILAC-G8: ${safeText(rg.decision)}`);
-    }
+  let maxE = null;
+  let maxEplusU = null;
+  let tol = null;
 
-    if (partes.length) return partes.join("\n");
-  }
+  bloques.forEach((b) => {
+    const e = toNum(b.maxAbsE);
+    const eu = toNum(b.maxAbsEplusU);
+    const t = toNum(b.tol);
 
-  return "No se ha recibido un resumen global estructurado para este certificado.";
+    if (e !== null) maxE = maxE === null ? e : Math.max(maxE, e);
+    if (eu !== null) maxEplusU = maxEplusU === null ? eu : Math.max(maxEplusU, eu);
+    if (t !== null) tol = tol === null ? t : Math.max(tol, t);
+  });
+
+  return [
+    `Número de bloques: ${bloques.length || 0}`,
+    `Número total de puntos evaluados: ${totalPuntos || 0}`,
+    `Máx |E| (µm): ${fmtNum1(maxE)}`,
+    `Máx (|E| + U) (µm): ${fmtNum1(maxEplusU)}`,
+    `Tolerancia global (µm): ${fmtNum1(tol)}`,
+    `Decisión global según ILAC-G8: ${safeText(decisionGlobal)}`
+  ].join("\n");
 }
 
-function construirExplicacionDecision(cert, decision) {
+function construirTextoTrazabilidad(cert, patrones) {
+  if (typeof cert?.trazabilidad === "string" && cert.trazabilidad.trim()) {
+    return cert.trazabilidad.trim();
+  }
+
+  if (!patrones.length) {
+    return "La trazabilidad metrológica se declara mediante patrones controlados por el laboratorio. En este registro no se ha recibido detalle estructurado suficiente de los patrones, por lo que la evidencia completa debe verificarse en el sistema interno y en el PDF oficial archivado.";
+  }
+
+  const lista = patrones
+    .map((p) => `${safeText(p.codigo)} · ${safeText(p.descripcion)}`)
+    .join("; ");
+
+  return `La trazabilidad metrológica se apoya en los siguientes patrones declarados en el registro: ${lista}. La situación de calibración, vigencia documental y control de estos patrones debe verificarse en el sistema metrológico del laboratorio.`;
+}
+
+function construirExplicacionDecision(cert, decision, bloques) {
   const d = upper(decision);
-  const bloques = normalizarBloquesDesdeCert(cert);
 
-  let txt = "";
-
-  txt += `La decisión global registrada para este certificado es: ${safeText(decision)}.\n\n`;
+  let txt = `La decisión global registrada para este certificado es: ${safeText(decision)}.\n\n`;
 
   if (d === "APTO") {
-    txt += "Interpretación: el resultado es favorable. Esto es coherente cuando los errores observados y la incertidumbre expandida se mantienen dentro del criterio de aceptación aplicado por el laboratorio.\n\n";
+    txt += "Esto indica que, con la información registrada, los resultados obtenidos son compatibles con el criterio de aceptación declarado por el laboratorio.\n";
+    txt += "En términos metrológicos, la conformidad es coherente cuando los errores observados y la incertidumbre expandida permanecen dentro de la tolerancia aplicable.\n\n";
   } else if (d === "NO APTO") {
-    txt += "Interpretación: el resultado es desfavorable. Esto es coherente cuando al menos uno de los resultados supera el criterio de aceptación y no puede sostenerse conformidad con la regla de decisión declarada.\n\n";
+    txt += "Esto indica que, con la información registrada, al menos uno de los resultados no es compatible con el criterio de aceptación declarado.\n";
+    txt += "En términos metrológicos, la no conformidad es coherente cuando el error observado, considerando la incertidumbre y la regla de decisión aplicada, supera el margen permitido.\n\n";
   } else if (d === "INDETERMINADO") {
-    txt += "Interpretación: el resultado no es plenamente concluyente. Esto ocurre cuando la incertidumbre influye de forma crítica cerca del límite de tolerancia y la decisión no puede cerrarse de manera tajante.\n\n";
+    txt += "Esto indica que la decisión no es plenamente concluyente con la información disponible.\n";
+    txt += "En este tipo de situación, el resultado se sitúa cerca del límite de aceptación y la incertidumbre influye de forma crítica en la evaluación.\n\n";
   } else {
-    txt += "Interpretación: no hay una decisión global estructurada suficientemente clara en los datos recibidos.\n\n";
+    txt += "No se ha podido determinar una decisión global estructurada suficientemente clara a partir de los datos recibidos.\n\n";
   }
 
   if (bloques.length) {
-    txt += `Se han identificado ${bloques.length} bloque(s) o grupo(s) de resultados para apoyar la evaluación documental.`;
+    txt += `El certificado contiene ${bloques.length} bloque(s) de resultados para apoyar la interpretación técnica.`;
   } else {
-    txt += "No se han identificado bloques estructurados de resultados; la explicación se basa en el resumen global disponible.";
+    txt += "No se han encontrado bloques estructurados de resultados; la explicación se basa únicamente en el resumen global disponible.";
   }
 
   return txt;
 }
 
-function construirTextoTrazabilidad(cert) {
-  if (typeof cert?.trazabilidad === "string" && cert.trazabilidad.trim()) {
-    return cert.trazabilidad.trim();
-  }
-
-  const patrones = Array.isArray(cert?.patrones) ? cert.patrones : [];
-  if (!patrones.length) {
-    return "La trazabilidad metrológica se declara mediante el uso de patrones controlados por el laboratorio. En este registro no se ha recibido un detalle estructurado de patrones, por lo que la evidencia completa debe comprobarse en el sistema y en el PDF oficial archivado.";
-  }
-
-  const lista = patrones
-    .map((p) => `${safeText(p.codigo || p.id)} · ${safeText(p.descripcion)}`)
-    .join("; ");
-
-  return `La trazabilidad metrológica se apoya en los siguientes patrones declarados en el registro: ${lista}. La situación de calibración y control documental de estos patrones debe verificarse en el sistema metrológico del laboratorio.`;
-}
-
+// ======================================================
+// DIBUJO PDF
+// ======================================================
 function drawBox(doc, x, y, w, h, opts = {}) {
   const {
     fillColor = null,
@@ -275,7 +290,7 @@ function writeBoxTitle(doc, x, y, text) {
     .font("Helvetica-Bold")
     .fontSize(11)
     .fillColor("#0f172a")
-    .text(text, x, y, { width: 500 });
+    .text(text, x, y);
 }
 
 function ensurePageSpace(doc, needed = 120) {
@@ -299,7 +314,7 @@ function drawKeyValueLines(doc, items, opts = {}) {
 
   items.forEach(([label, value]) => {
     doc.font("Helvetica-Bold").fontSize(fontSize).fillColor("#0f172a")
-      .text(`${label}`, x, cy, { width: labelWidth, continued: false });
+      .text(`${label}`, x, cy, { width: labelWidth });
 
     doc.font("Helvetica").fontSize(fontSize).fillColor("#111827")
       .text(`${safeText(value)}`, x + labelWidth, cy, { width: valueWidth });
@@ -322,7 +337,6 @@ function drawSimpleTable(doc, rows, opts = {}) {
   } = opts;
 
   let cy = y;
-  const totalWidth = widths.reduce((a, b) => a + b, 0);
 
   const drawRow = (cols, isHeader = false) => {
     ensurePageSpace(doc, rowHeight + 20);
@@ -341,8 +355,8 @@ function drawSimpleTable(doc, rows, opts = {}) {
         .font(isHeader ? "Helvetica-Bold" : "Helvetica")
         .fontSize(fontSize)
         .fillColor("#111827")
-        .text(safeText(cols[i]), cx + 6, cy + 6, {
-          width: w - 12,
+        .text(safeText(cols[i]), cx + 5, cy + 6, {
+          width: w - 10,
           height: rowHeight - 10,
         });
 
@@ -355,11 +369,114 @@ function drawSimpleTable(doc, rows, opts = {}) {
   rows.forEach((r) => drawRow(r, false));
 
   doc.y = cy + 4;
-  return { x, y, width: totalWidth, bottom: cy };
+  return cy;
+}
+
+function drawWrappedParagraph(doc, text, opts = {}) {
+  const {
+    x = 40,
+    y = doc.y,
+    width = 515,
+    fontSize = 9,
+    lineGap = 3,
+    align = "justify",
+  } = opts;
+
+  doc
+    .font("Helvetica")
+    .fontSize(fontSize)
+    .fillColor("#111827")
+    .text(safeText(text), x, y, {
+      width,
+      lineGap,
+      align,
+    });
+
+  return doc.y;
+}
+
+function renderBloqueDetalle(doc, bloque, left, contentWidth) {
+  const top = doc.y;
+
+  drawBox(doc, left, top, contentWidth, 42, {
+    fillColor: "#ffffff",
+    strokeColor: "#cbd5e1",
+    lineWidth: 1,
+    radius: 8,
+  });
+
+  writeBoxTitle(doc, left + 12, top + 12, `Bloque: ${safeText(bloque.nombre)}`);
+
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#334155")
+    .text(
+      `Lado: ${safeText(bloque.lado)} · Patrón: ${safeText(bloque.patron_codigo)} · ${safeText(bloque.patron_descripcion)}`,
+      left + 220,
+      top + 13,
+      {
+        width: contentWidth - 232,
+        align: "left",
+      }
+    );
+
+  doc.y = top + 52;
+
+  if (bloque.puntos.length) {
+    drawSimpleTable(
+      doc,
+      bloque.puntos.map((p) => [
+        safeText(p.nominal),
+        p.repeticiones.length ? p.repeticiones.map((r) => fmtNum(r, 3)).join(" / ") : "—",
+        fmtNum(p.media, 3),
+        fmtNum(p.sigma, 3),
+        fmtNum1(p.error),
+        fmtNum1(p.U),
+        fmtNum1(p.T),
+        safeText(p.decision),
+      ]),
+      {
+        x: left,
+        y: doc.y,
+        widths: [55, 150, 55, 50, 50, 50, 50, 55],
+        rowHeight: 24,
+        header: ["Nominal", "Lecturas", "Media", "σ", "Error", "U", "T", "Decisión"],
+        fontSize: 7.6,
+      }
+    );
+  } else {
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor("#475569")
+      .text("No se han recibido puntos detallados para este bloque.", left, doc.y, {
+        width: contentWidth,
+      });
+
+    doc.y += 18;
+  }
+
+  const resumenLinea = [
+    `Máx |E|: ${fmtNum1(bloque.maxAbsE)}`,
+    `Máx (|E| + U): ${fmtNum1(bloque.maxAbsEplusU)}`,
+    `Tolerancia: ${fmtNum1(bloque.tol)}`,
+    `Decisión: ${safeText(bloque.decision)}`
+  ].join(" · ");
+
+  doc
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#334155")
+    .text(resumenLinea, left, doc.y + 2, {
+      width: contentWidth,
+    });
+
+  doc.y += 18;
 }
 
 // ======================================================
-// GENERAR PDF
+// GENERAR PDF COMPLETO
 // ======================================================
 async function generarPDF(cert, numero) {
   const doc = new PDFDocument({
@@ -385,10 +502,12 @@ async function generarPDF(cert, numero) {
   const i = cert.instrumento || {};
   const c = cert.condiciones || {};
   const f = cert.firma || {};
-  const bloques = normalizarBloquesDesdeCert(cert);
-  const resumenTexto = construirTextoResumen(cert);
-  const explicacionDecision = construirExplicacionDecision(cert, decision);
-  const trazabilidadTexto = construirTextoTrazabilidad(cert);
+  const patrones = normalizarPatrones(cert);
+  const bloques = normalizarBloques(cert);
+
+  const resumenTexto = construirTextoResumen(cert, bloques, decision);
+  const explicacionDecision = construirExplicacionDecision(cert, decision, bloques);
+  const trazabilidadTexto = construirTextoTrazabilidad(cert, patrones);
 
   const pageWidth = doc.page.width;
   const left = doc.page.margins.left;
@@ -398,7 +517,7 @@ async function generarPDF(cert, numero) {
   // ======================================================
   // CABECERA
   // ======================================================
-  drawBox(doc, left, 36, contentWidth, 92, {
+  drawBox(doc, left, 36, contentWidth, 96, {
     fillColor: "#f8fafc",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
@@ -409,7 +528,7 @@ async function generarPDF(cert, numero) {
     .font("Helvetica-Bold")
     .fontSize(20)
     .fillColor("#0f172a")
-    .text("CERTIFICADO DE CALIBRACIÓN", left, 52, {
+    .text("CERTIFICADO DE CALIBRACIÓN", left, 50, {
       width: contentWidth,
       align: "center",
     });
@@ -430,13 +549,13 @@ async function generarPDF(cert, numero) {
   if (urlVerif) {
     try {
       const qr = await QRCode.toBuffer(urlVerif, { margin: 1, width: 160 });
-      doc.image(qr, right - 92, 48, { width: 72 });
+      doc.image(qr, right - 90, 50, { width: 68 });
       doc
         .font("Helvetica")
         .fontSize(7)
         .fillColor("#475569")
-        .text("Verificación online", right - 96, 123, {
-          width: 80,
+        .text("Verificación online", right - 94, 121, {
+          width: 78,
           align: "center",
         });
     } catch (e) {
@@ -444,8 +563,7 @@ async function generarPDF(cert, numero) {
     }
   }
 
-  // Cinta de estado
-  drawBox(doc, left, 138, contentWidth, 28, {
+  drawBox(doc, left, 140, contentWidth, 28, {
     fillColor: "#f8fafc",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
@@ -456,14 +574,14 @@ async function generarPDF(cert, numero) {
     .font("Helvetica-Bold")
     .fontSize(10)
     .fillColor("#0f172a")
-    .text("Regla de decisión:", left + 12, 147, { continued: true })
+    .text("Regla de decisión:", left + 12, 149, { continued: true })
     .font("Helvetica")
     .text(` ${safeText(cert.regla_decision, "ILAC-G8")}`, { continued: false });
 
   doc
     .font("Helvetica-Bold")
     .fillColor(decisionClr)
-    .text(`Decisión global: ${safeText(decision)}`, left + 320, 147, {
+    .text(`Decisión global: ${safeText(decision)}`, left + 320, 149, {
       width: 180,
       align: "right",
     });
@@ -500,13 +618,13 @@ async function generarPDF(cert, numero) {
     fontSize: 9,
   });
 
-  doc.y = doc.y + 12;
+  doc.y += 12;
 
   // ======================================================
   // 2. CONDICIONES
   // ======================================================
-  ensurePageSpace(doc, 95);
-  drawBox(doc, left, doc.y, contentWidth, 88, {
+  ensurePageSpace(doc, 100);
+  drawBox(doc, left, doc.y, contentWidth, 92, {
     fillColor: "#ffffff",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
@@ -529,124 +647,154 @@ async function generarPDF(cert, numero) {
     fontSize: 9,
   });
 
-  doc.y = doc.y + 12;
+  doc.y += 10;
 
   // ======================================================
-  // 3. RESUMEN GLOBAL
+  // 3. PATRONES
   // ======================================================
   ensurePageSpace(doc, 120);
-  const resumenHeight = 110;
-  drawBox(doc, left, doc.y, contentWidth, resumenHeight, {
+  const patronesHeight = patrones.length ? 40 + 24 * Math.min(patrones.length, 6) : 78;
+  drawBox(doc, left, doc.y, contentWidth, patronesHeight, {
     fillColor: "#ffffff",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
     radius: 8,
   });
 
-  writeBoxTitle(doc, left + 12, doc.y + 12, "3. Resumen global de resultados");
+  writeBoxTitle(doc, left + 12, doc.y + 12, "3. Patrones utilizados");
 
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#111827")
-    .text(resumenTexto, left + 12, doc.y + 30, {
-      width: contentWidth - 24,
-      lineGap: 3,
-      align: "left",
-    });
+  if (patrones.length) {
+    drawSimpleTable(
+      doc,
+      patrones.map((p) => [
+        safeText(p.codigo),
+        safeText(p.descripcion),
+        fmtNum(p.u_k2, 3),
+        safeText(p.nota),
+      ]),
+      {
+        x: left + 12,
+        y: doc.y + 10,
+        widths: [80, 220, 70, 133],
+        rowHeight: 22,
+        header: ["Código", "Descripción", "U(k=2)", "Observaciones"],
+        fontSize: 8,
+      }
+    );
+  } else {
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor("#475569")
+      .text("No se han recibido patrones estructurados en el JSON del certificado.", left + 12, doc.y + 18, {
+        width: contentWidth - 24,
+      });
 
-  doc.y = doc.y + resumenHeight + 8;
+    doc.y += 36;
+  }
+
+  doc.y += 8;
 
   // ======================================================
-  // 4. TABLA DE BLOQUES
+  // 4. RESUMEN GLOBAL
+  // ======================================================
+  ensurePageSpace(doc, 120);
+  drawBox(doc, left, doc.y, contentWidth, 112, {
+    fillColor: "#ffffff",
+    strokeColor: "#cbd5e1",
+    lineWidth: 1,
+    radius: 8,
+  });
+
+  writeBoxTitle(doc, left + 12, doc.y + 12, "4. Resumen global de resultados");
+
+  drawWrappedParagraph(doc, resumenTexto, {
+    x: left + 12,
+    y: doc.y + 30,
+    width: contentWidth - 24,
+    fontSize: 9,
+    lineGap: 3,
+    align: "left",
+  });
+
+  doc.y += 10;
+
+  // ======================================================
+  // 5. RESULTADOS POR BLOQUE
   // ======================================================
   if (bloques.length) {
-    ensurePageSpace(doc, 120);
+    ensurePageSpace(doc, 80);
 
-    drawBox(doc, left, doc.y, contentWidth, 34, {
+    drawBox(doc, left, doc.y, contentWidth, 36, {
       fillColor: "#ffffff",
       strokeColor: "#cbd5e1",
       lineWidth: 1,
       radius: 8,
     });
 
-    writeBoxTitle(doc, left + 12, doc.y + 11, "4. Resultados por bloque / magnitud");
+    writeBoxTitle(doc, left + 12, doc.y + 12, "5. Resultados obtenidos por bloque y punto");
+    doc.y += 46;
 
-    doc.y += 42;
+    bloques.forEach((bloque, idx) => {
+      ensurePageSpace(doc, 160);
+      renderBloqueDetalle(doc, bloque, left, contentWidth);
 
-    drawSimpleTable(
-      doc,
-      bloques.map((b) => [
-        safeText(b.nombre),
-        b.puntos === null ? "—" : String(b.puntos),
-        fmtNum(b.maxAbsE, 1),
-        fmtNum(b.maxAbsEplusU, 1),
-        fmtNum(b.tol, 1),
-        safeText(b.decision || "—"),
-      ]),
-      {
-        x: left,
-        y: doc.y,
-        widths: [150, 55, 80, 90, 75, 85],
-        rowHeight: 24,
-        header: ["Bloque", "Puntos", "Máx |E|", "Máx (|E|+U)", "Tol.", "Decisión"],
-        fontSize: 8.5,
+      if (idx < bloques.length - 1) {
+        doc.y += 10;
       }
-    );
+    });
   }
 
   // ======================================================
-  // 5. TRAZABILIDAD
+  // 6. TRAZABILIDAD
   // ======================================================
   ensurePageSpace(doc, 120);
-  drawBox(doc, left, doc.y, contentWidth, 100, {
+  drawBox(doc, left, doc.y, contentWidth, 106, {
     fillColor: "#ffffff",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
     radius: 8,
   });
 
-  writeBoxTitle(doc, left + 12, doc.y + 12, "5. Trazabilidad metrológica");
+  writeBoxTitle(doc, left + 12, doc.y + 12, "6. Trazabilidad metrológica");
 
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#111827")
-    .text(trazabilidadTexto, left + 12, doc.y + 30, {
-      width: contentWidth - 24,
-      lineGap: 3,
-      align: "justify",
-    });
+  drawWrappedParagraph(doc, trazabilidadTexto, {
+    x: left + 12,
+    y: doc.y + 30,
+    width: contentWidth - 24,
+    fontSize: 9,
+    lineGap: 3,
+    align: "justify",
+  });
 
-  doc.y = doc.y + 108;
+  doc.y += 12;
 
   // ======================================================
-  // 6. EXPLICACIÓN DE LA DECISIÓN
+  // 7. EXPLICACIÓN TÉCNICA
   // ======================================================
   ensurePageSpace(doc, 140);
-  drawBox(doc, left, doc.y, contentWidth, 128, {
+  drawBox(doc, left, doc.y, contentWidth, 126, {
     fillColor: "#ffffff",
     strokeColor: "#cbd5e1",
     lineWidth: 1,
     radius: 8,
   });
 
-  writeBoxTitle(doc, left + 12, doc.y + 12, "6. Explicación técnica del resultado");
+  writeBoxTitle(doc, left + 12, doc.y + 12, "7. Explicación técnica de la decisión");
 
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#111827")
-    .text(explicacionDecision, left + 12, doc.y + 30, {
-      width: contentWidth - 24,
-      lineGap: 3,
-      align: "justify",
-    });
+  drawWrappedParagraph(doc, explicacionDecision, {
+    x: left + 12,
+    y: doc.y + 30,
+    width: contentWidth - 24,
+    fontSize: 9,
+    lineGap: 3,
+    align: "justify",
+  });
 
-  doc.y = doc.y + 136;
+  doc.y += 12;
 
   // ======================================================
-  // 7. VALIDACIÓN Y FIRMA
+  // 8. VALIDACIÓN
   // ======================================================
   ensurePageSpace(doc, 120);
   drawBox(doc, left, doc.y, contentWidth, 120, {
@@ -656,7 +804,7 @@ async function generarPDF(cert, numero) {
     radius: 8,
   });
 
-  writeBoxTitle(doc, left + 12, doc.y + 12, "7. Validación");
+  writeBoxTitle(doc, left + 12, doc.y + 12, "8. Validación");
 
   drawKeyValueLines(doc, [
     ["Operario", f.nombre],
@@ -691,7 +839,7 @@ async function generarPDF(cert, numero) {
     }
   }
 
-  doc.y = doc.y + 44;
+  doc.y += 44;
 
   // ======================================================
   // PIE
@@ -755,22 +903,16 @@ export default async function handler(req, res) {
         ? JSON.parse(req.body)
         : req.body;
 
-    // 1) Número oficial
     const numero = await generarNumeroCertificado();
 
-    // 2) URL de verificación
     const verificacionURL =
       `https://tmp-backend-certificados.vercel.app/api/verificar-certificado?numero=${numero}`;
 
     certJSON.qr = { url_verificacion: verificacionURL };
 
-    // 3) Generar PDF
     const pdfBuffer = await generarPDF(certJSON, numero);
-
-    // 4) Subir a Storage
     const pdfURL = await subirPDF(pdfBuffer, `${numero}.pdf`);
 
-    // 5) Guardar registro
     await supabase.from("certificados").insert({
       numero,
       datos: limpiarParaBD(certJSON),
@@ -779,7 +921,6 @@ export default async function handler(req, res) {
       decision_global: inferirDecisionGlobal(certJSON),
     });
 
-    // 6) Respuesta
     return res.status(200).json({
       ok: true,
       certificado: {
@@ -788,6 +929,7 @@ export default async function handler(req, res) {
         verificacion_url: verificacionURL,
       },
     });
+
   } catch (e) {
     console.error("ERROR BACKEND:", e);
     return res.status(500).json({
